@@ -1,9 +1,13 @@
+import logging
 from typing import Optional
 
+from asyncio.streams import StreamReader, StreamWriter
 import socket
 import asyncio
 
 from interpreter import Interpreter
+
+logger = logging.getLogger(__name__)
 
 
 class Server:
@@ -22,24 +26,25 @@ class Server:
         self.loop = loop
 
     def run(self):
-        # TODO: run?
-        self.loop.run_until_complete(self.listen())
+        server = self.loop.run_until_complete(
+            asyncio.start_server(
+                self.handle_connection,
+                host=self.host,
+                port=self.port,
+            )
+        )
+        try:
+            logger.info("Starting at {}:{}...".format(self.host, self.port))
+            self.loop.run_forever()
+        except Exception as e:
+            server.close()
+            raise e
 
-    async def listen(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((self.host, self.port))
-            s.listen()
-            s.setblocking(False)
-            while True:
-                conn, addr = await self.loop.sock_accept(s)
-                conn.setblocking(False)
-                self.loop.create_task(self.handle_connection(conn))
+        self.loop.run_forever()
 
-    async def handle_connection(self, conn):
-        print("New connection: ", conn)
-        await Interpreter(self.loop, conn).run()
-        conn.close()
+    async def handle_connection(self, reader: StreamReader, writer: StreamWriter):
+        print("New connection: ")
+        await Interpreter(self.loop, reader, writer).run()
 
 
 if __name__ == '__main__':
