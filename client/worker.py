@@ -23,9 +23,9 @@ class Client:
         self.host = host
         self.port = port
         self.loop = loop
-        self.running = False
-        self.reader = None
-        self.writer = None
+        self.running: bool = False
+        self.reader: Optional[StreamReader] = None
+        self.writer: Optional[StreamWriter] = None
 
     def run(self):
         self.running = True
@@ -57,6 +57,9 @@ class Client:
             r, _, _ = select.select([stdin, reader_fd], [], [])
 
             if reader_fd in r:
+                if self.reader.at_eof():
+                    self.running = False
+                    continue
                 content = await self._read()
                 os.write(stdout, content)
             elif stdin in r:
@@ -68,14 +71,19 @@ class Client:
         return
 
     async def _read(self, timeout=0.5) -> bytes:
+        assert timeout >= 0
+
         header = b''
 
-        if timeout != -1:
+        try:
             fut = self.reader.read(1)
-            try:
-                header += await asyncio.wait_for(fut, timeout=timeout)
-            except asyncio.TimeoutError:
-                return b''
+            header += await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            return b''
+
+        if self.reader.at_eof():
+            self.running = False
+            return b''
 
         header += await self.reader.readexactly(4-len(header))
 

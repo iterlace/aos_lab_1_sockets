@@ -3,6 +3,7 @@ import ctypes
 import io
 import logging
 import os
+import datetime as dt
 import pty
 import selectors
 import socket
@@ -34,6 +35,8 @@ class Interpreter:
     def close(self):
         if self._closed:
             return
+
+        logger.warning("Closing interpreter...")
 
         if self.terminal and self.terminal.poll() is None:
             self.terminal.terminate()
@@ -67,22 +70,16 @@ class Interpreter:
         term_sel = selectors.DefaultSelector()
         term_sel.register(term_fd, selectors.EVENT_READ, data=None)
 
-        while self.terminal.poll() is None:
+        while self.terminal.poll() is None and self.conn.fileno() >= 0:
             await asyncio.sleep(0)
 
-            for key, mask in conn_sel.select(0.01):
+            for key, mask in conn_sel.select(0.001):
                 if mask == selectors.EVENT_READ:
                     await self.read_socket()
 
-            for key, mask in term_sel.select(0.01):
+            for key, mask in term_sel.select(0.001):
                 if mask == selectors.EVENT_READ:
                     await self.read_terminal()
-
-            # r, _, _ = self.selector.select([self.terminal_fd, conn_fd], [], [], timeout=0.1)
-            # if self.terminal_fd in r:
-            #     await self.read_terminal()
-            # elif conn_fd in r:
-            #     await self.read_socket()
 
     async def read_terminal(self):
         content = os.read(self.terminal_fd, 10240)
@@ -93,11 +90,14 @@ class Interpreter:
         content = await self._read()
         os.write(self.terminal_fd, content)
 
-    async def _read(self, timeout: float = 0.5) -> bytes:
+    async def _read(self) -> bytes:
         header = b''
 
         while len(header) < 4:
-            header = self.conn.recv(4 - len(header))
+            header += self.conn.recv(4 - len(header))
+            if header == b'':
+                self.conn.close()
+                return b''
 
         header = struct.unpack("!I", header)
         content_length = header[0]
