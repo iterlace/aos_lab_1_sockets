@@ -92,7 +92,6 @@ class Client:
         await self.writer.drain()
 
 
-
 if __name__ == '__main__':
     Client("127.0.0.1", 1028).run()
 

@@ -1,9 +1,12 @@
 import logging
 from typing import Optional
+import threading
+import selectors
 
 from asyncio.streams import StreamReader, StreamWriter
 import socket
 import asyncio
+from concurrent.futures.thread import ThreadPoolExecutor
 
 from interpreter import Interpreter
 
@@ -26,25 +29,35 @@ class Server:
         self.loop = loop
 
     def run(self):
-        server = self.loop.run_until_complete(
-            asyncio.start_server(
-                self.handle_connection,
-                host=self.host,
-                port=self.port,
-            )
-        )
+        self.loop.run_until_complete(self.listen())
+
+    async def listen(self):
         try:
             logger.info("Starting at {}:{}...".format(self.host, self.port))
-            self.loop.run_forever()
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((self.host, self.port))
+                s.listen()
+                s.setblocking(False)
+                while True:
+                    conn, addr = await self.loop.sock_accept(s)
+                    conn.setblocking(False)
+                    self.loop.create_task(self.handle_connection(conn))
         except Exception as e:
-            server.close()
             raise e
 
-        self.loop.run_forever()
-
-    async def handle_connection(self, reader: StreamReader, writer: StreamWriter):
-        print("New connection: ")
-        await Interpreter(self.loop, reader, writer).run()
+    async def handle_connection(self, conn: socket.socket):
+        print("New connection")
+        # interpreter = Interpreter(None, conn)
+        # t = threading.Thread(target=interpreter.run())
+        # t.start()
+        try:
+            await Interpreter(self.loop, conn).run()
+        except Exception as e:
+            conn.close()
+            raise e
+        finally:
+            conn.close()
 
 
 if __name__ == '__main__':
