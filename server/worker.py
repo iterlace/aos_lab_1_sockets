@@ -1,12 +1,7 @@
-import logging
-from typing import Optional
-import threading
-import selectors
-
-from asyncio.streams import StreamReader, StreamWriter
-import socket
 import asyncio
-from concurrent.futures.thread import ThreadPoolExecutor
+import logging
+import socket
+from typing import Optional
 
 from interpreter import Interpreter
 
@@ -48,9 +43,6 @@ class Server:
 
     async def handle_connection(self, conn: socket.socket):
         print("New connection")
-        # interpreter = Interpreter(None, conn)
-        # t = threading.Thread(target=interpreter.run())
-        # t.start()
         try:
             await Interpreter(self.loop, conn).run()
         except Exception as e:
@@ -62,4 +54,3 @@ class Server:
 
 if __name__ == '__main__':
     Server("127.0.0.1", 1028).run()
-
