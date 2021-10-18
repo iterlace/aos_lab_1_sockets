@@ -96,7 +96,13 @@ class Interpreter:
 
     async def read_socket(self):
         content = await self._read()
-        os.write(self.terminal_fd, content)
+        if content.strip() == b"who":
+            await self._send(
+                f"A remote terminal. Created by Evgeniy Goncharenko.".encode("utf-8")
+            )
+            os.write(self.terminal_fd, b"\n")
+        else:
+            os.write(self.terminal_fd, content)
 
     async def _read(self) -> bytes:
         header = b''
