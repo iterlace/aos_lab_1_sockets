@@ -14,6 +14,10 @@ from typing import Optional
 libc = ctypes.CDLL("libc.so.6")
 logger = logging.getLogger(__name__)
 
+LogAction = int
+RECEIVED: LogAction = 1
+SENT: LogAction = 2
+
 
 class Interpreter:
 
@@ -27,6 +31,7 @@ class Interpreter:
         self.conn_write_buf = io.BytesIO()
         self.terminal_fd: Optional[int] = None
         self.terminal: Optional[subprocess.Popen] = None
+        self._log = open(f"/tmp/aos-server", "a+")
         self._closed: bool = False
 
     def __del__(self):
@@ -35,6 +40,9 @@ class Interpreter:
     def close(self):
         if self._closed:
             return
+
+        if not self._log.closed:
+            self._log.close()
 
         logger.warning("Closing interpreter...")
 
@@ -105,6 +113,7 @@ class Interpreter:
         while len(content) < content_length:
             content += self.conn.recv(content_length - len(content))
         logger.warning(f"Received {content}...")
+        self.log(RECEIVED, content.decode("utf-8"))
         return content
 
     async def _send(self, content: bytes) -> None:
@@ -113,4 +122,10 @@ class Interpreter:
         message = header + content
         logger.warning(f"Sending {message}...")
         self.conn.sendall(message)
-        logger.warning("Sent!")
+        self.log(SENT, content.decode("utf-8"))
+
+    def log(self, action: LogAction, message: str):
+        timestamp = dt.datetime.now().isoformat()
+        action_ = "Received" if action == RECEIVED else "Sent"
+        self._log.write(f"{action_} at {timestamp}: {message.strip()}\n")
+        self._log.flush()

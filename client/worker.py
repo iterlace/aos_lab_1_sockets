@@ -1,4 +1,7 @@
+import uuid
 from typing import Optional
+import datetime as dt
+import logging
 
 import sys
 import socket
@@ -7,6 +10,10 @@ import os
 import select
 import struct
 import asyncio
+
+LogAction = int
+RECEIVED: LogAction = 1
+SENT: LogAction = 2
 
 
 class Client:
@@ -26,6 +33,11 @@ class Client:
         self.running: bool = False
         self.reader: Optional[StreamReader] = None
         self.writer: Optional[StreamWriter] = None
+        self._log = open(f"/tmp/aos-client", "a+")
+
+    def __del__(self):
+        if not self._log.closed:
+            self._log.close()
 
     def run(self):
         self.running = True
@@ -90,6 +102,7 @@ class Client:
         header = struct.unpack("!I", header)
         content_length = header[0]
         content = await self.reader.readexactly(content_length)
+        self.log(RECEIVED, content.decode("utf-8"))
         return content
 
     async def _send(self, content: bytes) -> None:
@@ -98,6 +111,13 @@ class Client:
         message = header + content
         self.writer.write(message)
         await self.writer.drain()
+        self.log(SENT, content.decode("utf-8"))
+
+    def log(self, action: LogAction, message: str):
+        timestamp = dt.datetime.now().isoformat()
+        action_ = "Received" if action == RECEIVED else "Sent"
+        self._log.write(f"{action_} at {timestamp}: {message.strip()}\n")
+        self._log.flush()
 
 
 if __name__ == '__main__':
