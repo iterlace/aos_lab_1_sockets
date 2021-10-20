@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from typing import Optional, Union
 import datetime as dt
 import logging
 
@@ -102,7 +102,7 @@ class Client:
         header = struct.unpack("!I", header)
         content_length = header[0]
         content = await self.reader.readexactly(content_length)
-        self.log(RECEIVED, content.decode("utf-8"))
+        self.log(RECEIVED, content)
         return content
 
     async def _send(self, content: bytes) -> None:
@@ -111,9 +111,15 @@ class Client:
         message = header + content
         self.writer.write(message)
         await self.writer.drain()
-        self.log(SENT, content.decode("utf-8"))
+        self.log(SENT, content)
 
-    def log(self, action: LogAction, message: str):
+    def log(self, action: LogAction, message: Union[bytes, str]):
+        if isinstance(message, bytes):
+            try:
+                message = message.decode("utf-8")
+            except UnicodeDecodeError:
+                return
+
         timestamp = dt.datetime.now().isoformat()
         action_ = "Received" if action == RECEIVED else "Sent"
         self._log.write(f"{action_} at {timestamp}: {message.strip()}\n")
